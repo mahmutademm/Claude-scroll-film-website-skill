@@ -45,4 +45,4 @@ Requires `ffmpeg` for assembly.
 
 ## License
 
-MIT — use it, fork it, build school websites with it.
+MIT 
