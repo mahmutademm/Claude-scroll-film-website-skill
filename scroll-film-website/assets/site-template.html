@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title><!--SITE_TITLE--></title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --base:#F4ECE0; --base-2:#EBE0CF; --ink:#221A14;
+  --accent:#C0521E; --accent-dp:#9A3D12; --muted:#7A6B59;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:auto;}
+body{background:var(--base);color:var(--ink);font-family:Inter,system-ui,sans-serif;}
+.spacer{position:relative;}
+.stage{position:sticky;top:0;height:100vh;overflow:hidden;}
+#film{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.scrim{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(to top, color-mix(in srgb, var(--base) 55%, transparent) 0%, transparent 38%);}
+.beat{position:absolute;left:6vw;bottom:10vh;max-width:44rem;opacity:0;transform:translateY(16px);
+  transition:none;pointer-events:none;}
+.beat .display{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:clamp(2rem,4.6vw,4rem);
+  line-height:1.06;letter-spacing:-0.015em;}
+.beat .sub{margin-top:.9rem;font-size:clamp(1rem,1.4vw,1.3rem);letter-spacing:.04em;
+  color:var(--ink);max-width:36ch;line-height:1.55;}
+.beat .sub b{color:var(--accent-dp);}
+.cue{position:absolute;left:50%;bottom:4vh;transform:translateX(-50%);font-size:.8rem;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--accent);opacity:.9;transition:opacity .6s;}
+.cue::after{content:"";display:block;width:1px;height:34px;background:var(--accent);
+  margin:10px auto 0;animation:drip 1.6s ease-in-out infinite;}
+@keyframes drip{0%{transform:scaleY(.2);transform-origin:top}55%{transform:scaleY(1)}100%{opacity:0}}
+.card{position:absolute;right:6vw;bottom:10vh;background:color-mix(in srgb, var(--base) 92%, white);
+  border:1px solid var(--base-2);border-radius:18px;padding:28px 30px;min-width:300px;max-width:380px;
+  opacity:0;transform:translateY(18px);pointer-events:none;box-shadow:0 24px 60px -30px rgb(0 0 0 / .35);}
+.card.show{opacity:1;transform:none;pointer-events:auto;transition:opacity .7s ease, transform .7s ease;}
+.card h2{font-family:Fraunces,Georgia,serif;font-weight:600;font-size:1.7rem;margin-bottom:14px;}
+.card a{display:block;color:var(--accent-dp);font-weight:500;text-decoration:none;padding:9px 0;
+  border-bottom:1px solid var(--base-2);}
+.card a:hover{color:var(--accent);}
+.card .foot{margin-top:14px;font-size:.8rem;color:var(--muted);}
+#loader{position:fixed;inset:0;background:var(--base);display:flex;flex-direction:column;gap:18px;
+  align-items:center;justify-content:center;z-index:50;transition:opacity .45s;}
+#loader .mark{font-family:Fraunces,Georgia,serif;font-size:1.4rem;font-weight:600;letter-spacing:.06em;}
+#bar{width:min(280px,60vw);height:2px;background:var(--base-2);border-radius:2px;overflow:hidden;}
+#bar i{display:block;height:100%;width:0%;background:var(--accent);}
+@media (max-width:900px){ .beat{left:7vw;right:7vw;bottom:12vh} .card{left:7vw;right:7vw} }
+</style>
+</head>
+<body>
+<div id="loader"><div class="mark"><!--LOADER_MARK--></div><div id="bar"><i></i></div></div>
+
+<main class="spacer" id="spacer">
+  <section class="stage">
+    <video id="film" muted playsinline preload="metadata"></video>
+    <div class="scrim"></div>
+    <div id="beats"></div>
+    <div class="cue" id="cue">scroll</div>
+    <aside class="card" id="card"></aside>
+  </section>
+</main>
+
+<script>
+/* ================= CONFIG — Claude: fill this from the approved plan ================= */
+const CONFIG = {
+  videoSrc: "assets/journey.mp4",
+  scrollLenVh: 700,          // total scroll length; bigger = slower scrub
+  ease: 0.12,                // playhead lerp factor
+  // One entry per clip, story order. dur = normalized seconds from make_journey.sh output.
+  beats: [
+    { dur: 5, display: "REPLACE Title",  sub: "REPLACE supporting line" },
+    { dur: 5, display: "",               sub: "REPLACE fact line" }
+  ],
+  endCard: {
+    heading: "Let's talk.",
+    showAtLocalProgress: 0.6,            // within the LAST beat
+    rows: [
+      { text: "email@example.com", href: "mailto:email@example.com" },
+      { text: "linkedin.com/in/example", href: "https://linkedin.com/in/example", newTab: true },
+      { text: "Download résumé", href: "assets/resume.pdf", download: true }
+    ],
+    foot: "Name · City"
+  }
+};
+/* ===================================================================================== */
+
+const film = document.getElementById('film');
+const spacer = document.getElementById('spacer');
+const loader = document.getElementById('loader');
+const barFill = document.querySelector('#bar i');
+const cue = document.getElementById('cue');
+const card = document.getElementById('card');
+
+spacer.style.height = CONFIG.scrollLenVh + 'vh';
+
+/* Build beat layers */
+const beatsWrap = document.getElementById('beats');
+const beatEls = CONFIG.beats.map(b=>{
+  const d=document.createElement('div'); d.className='beat';
+  d.innerHTML = (b.display?`<div class="display">${b.display}</div>`:"") +
+                (b.sub?`<div class="sub">${b.sub}</div>`:"");
+  beatsWrap.appendChild(d); return d;
+});
+/* Beat time windows from durations */
+const total = CONFIG.beats.reduce((s,b)=>s+b.dur,0);
+let acc=0; const windows = CONFIG.beats.map(b=>{const w={start:acc/total,end:(acc+b.dur)/total};acc+=b.dur;return w;});
+
+/* End card */
+card.innerHTML = `<h2>${CONFIG.endCard.heading}</h2>` +
+  CONFIG.endCard.rows.map(r=>`<a href="${r.href}"${r.newTab?' target="_blank" rel="noopener"':''}${r.download?' download':''}>${r.text}</a>`).join('') +
+  `<div class="foot">${CONFIG.endCard.foot}</div>`;
+
+/* Mode detection */
+const fallback = matchMedia('(max-width: 900px)').matches ||
+                 matchMedia('(prefers-reduced-motion: reduce)').matches ||
+                 matchMedia('(pointer: coarse)').matches;
+
+/* Blob loader: full fetch so every frame is seekable (scrub mode only) */
+async function loadFilm(){
+  if (fallback){
+    film.src = CONFIG.videoSrc; film.loop = true; film.autoplay = true;
+    await new Promise(r=>film.addEventListener('loadedmetadata',r,{once:true}));
+    film.play().catch(()=>{});
+    return;
+  }
+  const res = await fetch(CONFIG.videoSrc);
+  const len = +res.headers.get('Content-Length') || 0;
+  const reader = res.body.getReader(); const chunks=[]; let got=0;
+  for(;;){ const {done,value} = await reader.read(); if(done) break;
+    chunks.push(value); got+=value.length;
+    if(len) barFill.style.width = (got/len*100).toFixed(1)+'%'; }
+  film.src = URL.createObjectURL(new Blob(chunks,{type:'video/mp4'}));
+  await new Promise(r=>film.addEventListener('loadedmetadata',r,{once:true}));
+}
+
+/* Scroll → playhead */
+let target=0, scrolled=false;
+function onScroll(){
+  const max = spacer.offsetHeight - innerHeight;
+  const p = Math.min(Math.max(scrollY/max,0),1);
+  target = p * (film.duration||0);
+  if(!scrolled && scrollY>8){scrolled=true; cue.style.opacity=0;}
+  if (fallback) paintByProgress(p);
+}
+function paintByTime(){
+  const t = film.currentTime, d = film.duration||1;
+  paint(t/d);
+}
+function paint(p){
+  windows.forEach((w,i)=>{
+    const span=w.end-w.start, lp=(p-w.start)/span;
+    let o=0;
+    if(lp>=0&&lp<=1){ o = lp<.2 ? lp/.2 : lp>.85 ? Math.max(0,(1-lp)/.15) : 1; }
+    beatEls[i].style.opacity=o;
+    beatEls[i].style.transform=`translateY(${16*(1-Math.min(o*1.4,1))}px)`;
+  });
+  const lw=windows[windows.length-1];
+  const llp=(p-lw.start)/(lw.end-lw.start);
+  card.classList.toggle('show', llp>=CONFIG.endCard.showAtLocalProgress);
+}
+function paintByProgress(p){ paint(p); }
+
+function tick(){
+  if(!fallback && film.readyState>=2 && Number.isFinite(film.duration)){
+    const delta = target - film.currentTime;
+    if(Math.abs(delta)>1/60) film.currentTime += delta*CONFIG.ease;
+    paintByTime();
+  }
+  requestAnimationFrame(tick);
+}
+
+loadFilm().then(()=>{
+  loader.style.opacity=0; setTimeout(()=>loader.remove(),500);
+  addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+  requestAnimationFrame(tick);
+});
+</script>
+</body>
+</html>

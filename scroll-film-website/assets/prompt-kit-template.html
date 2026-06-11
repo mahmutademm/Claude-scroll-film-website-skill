@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt Kit — Scroll-Film Website</title>
+<style>
+  :root{--base:#F4ECE0;--panel:#FFFDF8;--ink:#221A14;--accent:#C0521E;--accent-dp:#9A3D12;--muted:#7A6B59;--ok:#2E7D32;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:system-ui,-apple-system,Segoe UI,Inter,sans-serif;background:var(--base);color:var(--ink);min-height:100vh;}
+  header{padding:28px 24px 8px;max-width:980px;margin:0 auto;}
+  h1{font-size:26px;letter-spacing:-0.02em;}
+  .sub{color:var(--muted);margin-top:6px;font-size:14px;line-height:1.5;}
+  nav{display:flex;gap:8px;max-width:980px;margin:18px auto 0;padding:0 24px;}
+  nav button{flex:1;padding:12px;border:1.5px solid var(--ink);background:transparent;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;color:var(--ink);}
+  nav button.active{background:var(--ink);color:var(--base);}
+  main{max-width:980px;margin:18px auto 60px;padding:0 24px;}
+  .page{display:none;}.page.active{display:block;}
+  .notice{background:var(--panel);border:1px dashed var(--accent);border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.55;margin-bottom:18px;}
+  .card{background:var(--panel);border:1px solid #E3D8C6;border-radius:14px;padding:18px;margin-bottom:16px;}
+  .card h3{font-size:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .badge{font-size:12px;font-weight:700;letter-spacing:.06em;background:var(--accent);color:#fff;border-radius:6px;padding:3px 8px;}
+  .file{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;background:#EFE6D6;border-radius:6px;padding:3px 8px;color:var(--accent-dp);}
+  .chain{font-size:13px;color:var(--muted);margin:8px 0 2px;}
+  .chain b{color:var(--ink);}
+  textarea{width:100%;min-height:110px;margin-top:10px;padding:12px;border:1px solid #D8CBB6;border-radius:10px;font:13.5px/1.6 ui-monospace,Menlo,monospace;color:var(--ink);background:#FFFEFB;resize:vertical;}
+  .row{display:flex;gap:10px;margin-top:10px;align-items:center;flex-wrap:wrap;}
+  .copy{padding:9px 16px;border:none;border-radius:9px;background:var(--accent);color:#fff;font-weight:600;font-size:14px;cursor:pointer;}
+  .copy:hover{background:var(--accent-dp);}
+  .copy.done{background:var(--ok);}
+  .hint{font-size:12.5px;color:var(--muted);}
+  .ref{margin-top:8px;background:#FFF3E8;border:1.5px solid var(--accent);border-radius:9px;padding:9px 12px;font-size:13.5px;line-height:1.5;}
+  .ref b{color:var(--accent-dp);}
+  .steps{margin:10px 0 0 18px;font-size:14px;line-height:1.7;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Prompt Kit</h1>
+  <p class="sub">Everything you need to generate the film's assets in your own AI tool (Higgsfield, Kling, Runway, …).
+  Work through <b>Page 1 first</b> — generate and approve every frame — then build the clips on Page 2.
+  Prompts are editable: tweak them in the box, then copy. Save every output with the exact filename shown.</p>
+</header>
+<nav>
+  <button id="tabFrames" class="active" onclick="showPage('frames')">Page 1 · Frame images</button>
+  <button id="tabClips" onclick="showPage('clips')">Page 2 · Video clips</button>
+</nav>
+<main>
+  <section id="frames" class="page active">
+    <div class="notice"><b>How:</b> use one image model for all frames, 16:9 landscape, and generate them in order.
+    Some frames list a <b>reference image</b> (a person's photo or a logo) — attach that file in your tool <b>before</b> running the prompt; it's how the AI keeps the real face/logo accurate.
+    Re-generate any frame you don't love <i>before</i> moving to clips — clips inherit frame flaws.</div>
+    <div id="frameCards"></div>
+  </section>
+  <section id="clips" class="page">
+    <div class="notice"><b>How:</b> use ONE video model that accepts <b>both a start frame and an end frame</b> (Kling and Seedance support this), ~5 seconds per clip, 16:9.
+    Upload the two frames listed, paste the prompt, generate. Save each result with the exact filename shown, all into the project's <span class="file">assets/</span> folder.</div>
+    <div id="clipCards"></div>
+  </section>
+</main>
+<script>
+/* ============================================================
+   PROMPTS — Claude: replace this object with the project's plan.
+   frames: ordered list of boundary frames (A, B, C, ...).
+   clips:  ordered list; start/end reference frame ids.
+   ============================================================ */
+const PROMPTS = {
+  frames: [
+    { id:"A", file:"frame_A.png", title:"EXAMPLE — Opening scene", reference:"",
+      prompt:"REPLACE ME — full detailed image prompt incl. the project grade line" }
+  ],
+  clips: [
+    { file:"clip_01.mp4", title:"EXAMPLE — Beat 1", start:"A", end:"B", duration:"~5s",
+      prompt:"REPLACE ME — morph + single camera move + grade line" }
+  ]
+};
+/* ============================================================ */
+
+function el(html){const t=document.createElement('template');t.innerHTML=html.trim();return t.content.firstChild;}
+function copyBtnHandler(btn, ta){
+  navigator.clipboard.writeText(ta.value).then(()=>{
+    btn.textContent='Copied ✓';btn.classList.add('done');
+    setTimeout(()=>{btn.textContent='Copy prompt';btn.classList.remove('done');},1600);
+  });
+}
+function render(){
+  const fWrap=document.getElementById('frameCards');
+  PROMPTS.frames.forEach(f=>{
+    const card=el(`<div class="card">
+      <h3><span class="badge">FRAME ${f.id}</span> ${f.title} <span class="file">save as: ${f.file}</span></h3>
+      ${f.reference?`<div class="ref">⚠️ <b>Step 1 — attach reference first:</b> upload <b>${f.reference}</b> as the <i>reference image</i> in your tool before running this prompt. Text alone cannot reproduce a real face or logo.</div>`:""}
+      <textarea></textarea>
+      <div class="row"><button class="copy">Copy prompt</button>
+      <span class="hint">16:9 · no text/watermarks in image · edit freely before copying</span></div>
+    </div>`);
+    const ta=card.querySelector('textarea');ta.value=f.prompt;
+    card.querySelector('.copy').onclick=e=>copyBtnHandler(e.target,ta);
+    fWrap.appendChild(card);
+  });
+  const cWrap=document.getElementById('clipCards');
+  const frameFile=id=>(PROMPTS.frames.find(f=>f.id===id)||{}).file||`frame_${id}.png`;
+  PROMPTS.clips.forEach((c,i)=>{
+    const sf=frameFile(c.start), ef=frameFile(c.end);
+    const card=el(`<div class="card">
+      <h3><span class="badge">CLIP ${String(i+1).padStart(2,'0')}</span> ${c.title} <span class="file">save as: ${c.file}</span></h3>
+      <p class="chain">Start frame: <b>${sf}</b> → End frame: <b>${ef}</b> · ${c.duration||"~5s"} · 16:9</p>
+      <ol class="steps">
+        <li>Upload <b>${sf}</b> as the START frame and <b>${ef}</b> as the END frame.</li>
+        <li>Paste the prompt below (edit first if you like).</li>
+        <li>Generate, review, save as <b>${c.file}</b> into <b>assets/</b>.</li>
+      </ol>
+      <textarea></textarea>
+      <div class="row"><button class="copy">Copy prompt</button>
+      <span class="hint">one slow camera move · no cuts · same model for every clip</span></div>
+    </div>`);
+    const ta=card.querySelector('textarea');ta.value=c.prompt;
+    card.querySelector('.copy').onclick=e=>copyBtnHandler(e.target,ta);
+    cWrap.appendChild(card);
+  });
+}
+function showPage(p){
+  document.getElementById('frames').classList.toggle('active',p==='frames');
+  document.getElementById('clips').classList.toggle('active',p==='clips');
+  document.getElementById('tabFrames').classList.toggle('active',p==='frames');
+  document.getElementById('tabClips').classList.toggle('active',p==='clips');
+  window.scrollTo({top:0});
+}
+render();
+</script>
+</body>
+</html>
